@@ -83,9 +83,9 @@ foreach ($instanceId in $instanceIds)
     $delete_instance = read-host "delete instance"$instanceId"? `[Y/N`]"
     if ($delete_instance -eq "Y")
     {
-      $EIPs = "N"
-      $volumes = "N"
-      $snaps = "N"
+      $EIPs = "0"
+      $volumes = "0"
+      $snaps = "0"
       $documentation = "Md7h77yoo73UM3j"
   
       if ($EIP_Count -ge 1){$EIPs = read-host "delete Elastic IPs?         `[Y/N`]"}
@@ -99,7 +99,7 @@ foreach ($instanceId in $instanceIds)
        $documentation = read-host "Please note where this is documented for $instanceId"}
        
        #create the report
-       $timestamp = get-date -f yyyy.mm.dd_HH.mm.ss
+       $timestamp = get-date -f yyyy.MM.dd_HH.mm.ss
        $out = new-object System.Collections.ArrayList
   
        [void]$out.add("Decomissioning Report for $instanceId")
@@ -109,7 +109,7 @@ foreach ($instanceId in $instanceIds)
        [void]$out.add("Delete Volumes:         $volumes")
        [void]$out.add("Delete snapshots:       $snaps")
        if($documentation -ne "Md7h77yoo73UM3j"){[void]$out.add("user notification documentation: $documentation")}
-       [void]$out.add("-----Decomissioning Deatils-----")
+       [void]$out.add("-----Decomissioning Details-----")
        foreach ($tuple in $decomList)
        {
          $str =""
@@ -152,12 +152,10 @@ foreach ($instanceId in $instanceIds)
 
     #output the report
     $filename = $timestamp + "_decomReport_" + $instanceId
-    $filename = [Environment]::GetFolderPath("Desktop") + $filename
-    $fstream  = New-Object System.IO.FileStream($fileName,[io.filemode]::OpenOrCreate)
-    $w =  New-Object System.IO.StreamWriter($fstream)
+    $filename = [Environment]::GetFolderPath("Desktop") + '\'+  $filename + '.txt'
+    $w =  New-Object System.IO.StreamWriter($filename)
     foreach ($line in $out){[void]$w.WriteLine($line)}
     $w.close()
-    $fstream.close()
 
     #upload to S3
     }
@@ -180,8 +178,13 @@ foreach ($instanceId in $instanceIds)
 
 #TO DO
 #-----------------------
-#  list associated AMIs
+#  list associated AMIs, or at least report them (via snapshots)
 #  add to decom list, label as AMI
+
+#  figure out how to escape on termination protection
+#  Better error handling for volumes when not found, snapshots protected by AMIs
+
+#  multi-thread the delete process
 
 #  list associated security groups
 #  add to decom list where COUNT = 0, label as SG
