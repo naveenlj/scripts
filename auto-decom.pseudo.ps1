@@ -4,31 +4,19 @@ param (
 #[string]$instanceIds_file=""
 )
 
-function Decomission
-{
-param ($EIPs,$volumes,$snaps,$decomList,$documentation)
-
-#create decom report
-#upload to S3
-#decom resources appropriately
-
-}
-
-
-if ($silent -eq $true)
-{
-#TO DO
-#-----------
-#load instanceIds_file into InstanceIds
-#load instancsIds_file_documentation into $documented
-}
+#if ($silent -eq $true)
+#{
+##TO DO
+##-----------
+##load instanceIds_file into InstanceIds
+##load instancsIds_file_documentation into $documented
+#}
 
 foreach ($instanceId in $instanceIds)
 {
   write-host "Processing $instanceId..."
   
-  try{$verified = aws ec2 describe-instances --instance-id $instanceId}
-  catch{write-host "$instanceId not found"}
+  $verified = aws ec2 describe-instances --instance-id $instanceId
 
   if ($verified)
   { 
@@ -42,98 +30,150 @@ foreach ($instanceId in $instanceIds)
   
     #fetch volume information
     write-host "  Gathering volumes..."
-    $volumeInfo1 = aws ec2 describe-volumes --filters Name="attachment.instance-id",Values=$instanceId --query "Volumes[*].Attachments[*].{Device:Device,auto_delete:DeleteOnTermination}" --output text
-  
-    $volumeInfo2 = aws ec2 describe-volumes --filters Name="attachment.instance-id",Values=$instanceId --query "Volumes[*].{Size:Size,volume_id:VolumeId}" --output text
-    #add each volume's information to the decom list
-    $volCount = $volumeInfo1.count
+    $volumes = aws ec2 describe-volumes --filters Name="attachment.instance-id",Values=$instanceId --query "Volumes[*].[Attachments[0].Device,Size,DeleteOnTermination,VolumeId]" --output text
+    $volCount = $volumes.count
     write-host "  $volCount found."
-    if ($volumeInfo1.count -gt 1)
+    if ($volumes.count -ge 1)
     {
-      for ($i=0;$i -lt $volumeInfo1.count; $i++)
+      foreach ($volumeInfo in $volumes)
       {
-        $tuple = [System.Tuple]::Create("Volume",$volumeInfo1[$i] + "`t" + $volumeInfo2[$i])
+        $volumeInfoList = $volumeInfo.split("`t")
+        $tuple = [System.Tuple]::Create("Volume",$volumeInfoList)
         [void]$decomList.add($tuple)
-      }
-    }
-    elseif ($volumeInfo1.count -eq 1)
-    {
-        $tuple = [System.Tuple]::Create("Volume",$volumeInfo1 + "`t" + $volumeInfo2)
-        [void]$decomList.add($tuple)
-    }
     
-    #fetch snapshot information
-    write-host "  Gathering snapshots..."
-    $volumeIds = aws ec2 describe-volumes --filters Name="attachment.instance-id",Values=$instanceId --query "Volumes[*].{volume_id:VolumeId}" --output text
-    foreach($volumeId in $VolumeIds)
-    {
-      $snapshotInfo1 = aws ec2 describe-snapshots --filters Name="volume-id",Values=$volumeId --query "Snapshots[*].SnapshotId" --output text
-      if ($snapshotInfo1 -ge 1)
-      { 
-        $snapshotInfo2 = $snapshotInfo1.split("`t")
-    
-        #add each snapshot's information to the decom list
-        $snapCount = $snapshotInfo2.count
-        write-host "  $snapCount found."
-        foreach($snapId in $snapshotInfo2)
-        {
-          $tuple = [System.Tuple]::Create("Snapshot",$volumeId + "`t" + $snapId)
-          [void]$decomList.add($tuple)
+        #fetch snapshot information
+        $volumeId = $volumeInfoList[$volumeInfoList.count - 1]
+        write-host "    Gathering snapshots for $volumeId..."
+        $snapshots = aws ec2 describe-snapshots --filters Name="volume-id",Values=$volumeId --query "Snapshots[*].SnapshotId" --output text
+        if ($snapshots -ge 1)
+        { 
+          $snapshotList = $snapshots.split("`t")
+      
+          #add each snapshot's information to the decom list
+          $snapCount = $snapshotList.count
+          write-host "    $snapCount found."
+          foreach($snapId in $snapshotList)
+          {
+            $snapInfoList = $volumeId,$snapId
+            $tuple = [System.Tuple]::Create("Snapshot",$snapInfoList)
+            [void]$decomList.add($tuple)
+          }
         }
+        else{write-host "    0 found."}
       }
     }
     #fetch Elastic IP Information
     write-host "  Gathering elastic IPs..."
-    $EIP_Info1 = aws ec2 describe-addresses  --filters Name="instance-id",Values=$instanceId --query "Addresses[*].PublicIp" --output text
-    $EIP_Info2 = aws ec2 describe-addresses  --filters Name="instance-id",Values=$instanceId --query "Addresses[*].AllocationId" --output text
+    $EIPs = aws ec2 describe-addresses  --filters Name="instance-id",Values=$instanceId --query "Addresses[*].[PublicIp,AllocationId]" --output text
     
     #add each Elastic IP's intformation to the decom list
-    $EIP_Count = $EIP_Info1.count
+    $EIP_Count = $EIPs.count
     write-host "  $EIP_Count found."
-    if($EIP_Info1.count -gt 1)
+    if($EIPs -ge 1)
     {
-      for($i=0;$i -lt $EIP_Info1.count;$i++)
+      foreach ($EIP in $EIPs)
       {
-        $tuple = [System.Tuple]::Create("Elastic IP",$EIP_Info1[$i] + "`t" + $EIP_Info2[$i])
+        $EIP_List = $EIP.split("`t")
+        $tuple = [System.Tuple]::Create("Elastic IP",$EIP_List)
         [void]$decomList.add($tuple)
       }
     }
-    elseif ($EIP_Info1.count -eq 1)
-    {
-        $tuple = [System.Tuple]::Create("Elastic IP",$EIP_Info1 + "`t" + $EIP_Info2)
-        [void]$decomList.add($tuple)
-    }
     
+    #query the user    
     $delete_instance = read-host "delete instance"$instanceId"? `[Y/N`]"
     if ($delete_instance -eq "Y")
     {
       $EIPs = "N"
       $volumes = "N"
       $snaps = "N"
-      $documentation = ""
+      $documentation = "Md7h77yoo73UM3j"
   
       if ($EIP_Count -ge 1){$EIPs = read-host "delete Elastic IPs?         `[Y/N`]"}
       if ($volCount  -ge 1){$volumes = read-host "delete volumes?             `[Y/N`]"}
       if ($snapCount -ge 1){$snaps = read-host "delete snapshots?           `[Y/N`]"}
       $accountAliases = aws iam list-account-aliases --output text
-      $accountAlias = $accountAliases.split("`t")[1]
+      if($accountAliases){$accountAlias = $accountAliases.split("`t")[1]}
   
-      if ($delete_volumes -eq "Y" -and $delete_snaps -eq "Y" -and $accountAlias -eq "****")
+      if ($delete_volumes -eq "Y" -and $delete_snaps -eq "Y" -and $accountAlias -eq "amr-p")
       {write-host "Deleting both volumes and snapshots from production requires 30 days notice to the application owner."
        $documentation = read-host "Please note where this is documented for $instanceId"}
+       
+       #create the report
+       $timestamp = get-date -f yyyy.mm.dd_HH.mm.ss
+       $out = new-object System.Collections.ArrayList
   
-      Decomission($EIPs,$volumes,$snaps,$decomList,$documentation)
+       [void]$out.add("Decomissioning Report for $instanceId")
+       [void]$out.add("Started $timestamp")
+       [void]$out.add("-------------------------------------")
+       [void]$out.add("Delete Elastic IPs:     $EIPs")
+       [void]$out.add("Delete Volumes:         $volumes")
+       [void]$out.add("Delete snapshots:       $snaps")
+       if($documentation -ne "Md7h77yoo73UM3j"){[void]$out.add("user notification documentation: $documentation")}
+       [void]$out.add("-----Decomissioning Deatils-----")
+       foreach ($tuple in $decomList)
+       {
+         $str =""
+         foreach ($info in $tuple.Item2)
+         {
+           $str +="$info,"
+         }
+         $str = $str.substring(0,$str.length - 2)
+         $str = '(' + $tuple.Item1 + ',(' + $str + '))'
+         [void]$out.add($str)
+       }
+  
+       #delete stuff
+       write-host "Deleting $instanceId..."
+       aws ec2 terminate-instances --instance-ids $instanceId --output text
+       do
+       {
+         Write-Host -NoNewline "."
+         sleep(1)
+         $state = aws ec2 describe-instances --instance-ids $instanceId --query "Reservations[*].Instances[*].State.Name" --output text
+       }
+       Until($state -eq "terminated")
+           
+
+       foreach($tuple in $decomList)
+       {
+         if ($tuple.Item1 -eq "Elastic IP" -and $EIPs -eq "Y") {
+           aws ec2 release-address --allocation-id $tuple.Item2[$tuple.Item2.count - 1] --output text
+           $str = 'Deleting ' + $tuple.Item2[$tuple.Item2.count - 1] + '...';write-host $str
+         }
+         if ($tuple.Item1 -eq "Volume" -and $volumes -eq "Y") {
+           aws ec2 delete-volume --volume-id $tuple.Item2[$tuple.Item2.count - 1] --output text
+           $str = 'Deleting ' + $tuple.Item2[$tuple.Item2.count - 1] + '...';write-host $str
+         }
+         if ($tuple.Item1 -eq "Snapshot" -and $snaps -eq "Y") {
+           aws ec2 delete-snapshot --snapshot-id $tuple.Item2[$tuple.Item2.count - 1] --output text
+           $str = 'Deleting ' + $tuple.Item2[$tuple.Item2.count - 1] + '...';write-host $str
+         }
+       }
+
+    #output the report
+    $filename = $timestamp + "_decomReport_" + $instanceId
+    $filename = [Environment]::GetFolderPath("Desktop") + $filename
+    $fstream  = New-Object System.IO.FileStream($fileName,[io.filemode]::OpenOrCreate)
+    $w =  New-Object System.IO.StreamWriter($fstream)
+    foreach ($line in $out){[void]$w.WriteLine($line)}
+    $w.close()
+    $fstream.close()
+
+    #upload to S3
     }
   }
 #DEBUG: Print Tuple List
 #-----------------------
 #  foreach ($tuple in $decomList)
 #  {
-#    write-host $tuple[0]
-#    foreach ($item in $tuple[1])
+#    $str =""
+#    foreach ($info in $tuple.Item2)
 #    {
-#      write-host $item
+#      $str +="$info,"
 #    }
+#    $str = $str.substring(0,$str.length - 2)
+#    $str = '(' + $tuple.Item1 + ',(' + $str + '))'
+#    write-host $str
 #  }
 #-----------------------
 }
