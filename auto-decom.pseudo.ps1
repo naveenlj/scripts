@@ -94,7 +94,7 @@ foreach ($instanceId in $instanceIds)
       $accountAliases = aws iam list-account-aliases --output text
       if($accountAliases){$accountAlias = $accountAliases.split("`t")[1]}
   
-      if ($delete_volumes -eq "Y" -and $delete_snaps -eq "Y" -and $accountAlias -eq "amr-p")
+      if ($delete_volumes -eq "Y" -and $delete_snaps -eq "Y" -and $accountAlias -eq "****")
       {write-host "Deleting both volumes and snapshots from production requires 30 days notice to the application owner."
        $documentation = read-host "Please note where this is documented for $instanceId"}
        
