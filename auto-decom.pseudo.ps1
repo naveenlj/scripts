@@ -1,3 +1,5 @@
+#USAGE: .\auto-decom.pseudo.ps1 [INSTANCE_ID],[INSTANCE_ID]
+
 param (
 [string[]]$instanceIds
 #[switch]$silent=$false #option to run silently
