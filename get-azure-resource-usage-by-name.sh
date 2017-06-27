@@ -1,5 +1,6 @@
 #!/bin/bash
-$RGROUPS=`az group list --output tsv | grep -i test | awk '{print $1}' | awk -F / '{print $5}'`
+
+RGROUPS=`az group list --output tsv | grep -i test | awk '{print $1}' | awk -F / '{print $5}'`
 
 while IFS= read -r group;
 do 
